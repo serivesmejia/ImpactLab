@@ -103,7 +103,7 @@ onMount(async () => {
   buildStars(scene, 8000);
 
   // Meteors / test sphere
-  addSphere(scene, { radius: 1, widthSegs: 32, heightSegs: 16, color: 0x93c5fd, position: [0, 10, 0] });
+  // addSphere(scene, { radius: 1, widthSegs: 32, heightSegs: 16, color: 0x93c5fd, position: [0, 10, 0] });
 
   // Solar System
   buildSolarSystem(scene);
