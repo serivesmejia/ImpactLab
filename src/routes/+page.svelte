@@ -1,26 +1,37 @@
-<script>
+<script lang="ts">
   import ControllerSidebar from './ControllerSidebar.svelte';
   import EarthMap from './visualizers/EarthMap.svelte';
   import Orbits from './visualizers/Orbits.svelte';
   
-  // 1. Importa los componentes de Flowbite Svelte
+  import type { Controls } from "./controls";
   import { Tabs, TabItem } from 'flowbite-svelte';
+
+  const controls: Controls = {
+    daysPerSec: 1
+  };
 </script>
 
 <div class="flex h-screen bg-slate-950 text-white">
-  <ControllerSidebar />
+  <!-- Sidebar fijo -->
+  <ControllerSidebar controls={controls} class="flex-none w-64" />
 
-  <main class="flex-grow p-8 overflow-y-auto">
-    
+  <!-- Contenido principal -->
+  <main class="flex-1 flex flex-col overflow-hidden">
     <Tabs style="underline">
-      <TabItem title="3D Orbit">
-        <Orbits />
+      
+      <TabItem open title="3D Orbit" class="flex-1 flex flex-col overflow-hidden">
+        <!-- Contenedor del canvas -->
+        <div class="flex-1 flex overflow-hidden">
+          <Orbits controls={controls} class="flex-1 w-full h-full" />
+        </div>
       </TabItem>
-        
-      <TabItem open title="Earth Map">
-        <EarthMap />
-      </TabItem>
-    </Tabs>
 
+      <TabItem title="Earth Map" class="flex-1 flex flex-col overflow-hidden">
+        <div class="flex-1 flex overflow-hidden">
+          <EarthMap class="flex-1 w-full h-full" />
+        </div>
+      </TabItem>
+
+    </Tabs>
   </main>
 </div>

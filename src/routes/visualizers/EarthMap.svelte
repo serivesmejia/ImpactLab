@@ -29,7 +29,7 @@
 <style>
     .map {
         /* Give the map a specific height */
-        height: 80vh; /* 75% of the viewport height */
+        height: 90vh; /* 75% of the viewport height */
         width: 100%;
         border-radius: 0.5rem; /* Optional: adds rounded corners */
     }
