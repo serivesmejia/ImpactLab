@@ -11,27 +11,59 @@
   };
 </script>
 
-<div class="flex h-screen bg-slate-950 text-white">
+<div class="app-container">
   <!-- Sidebar fijo -->
-  <ControllerSidebar controls={controls} class="flex-none w-64" />
+  <ControllerSidebar controls={controls}/>
 
   <!-- Contenido principal -->
-  <main class="flex-1 flex flex-col overflow-hidden">
-    <Tabs style="underline">
-      
-      <TabItem open title="3D Orbit" class="flex-1 flex flex-col overflow-hidden">
-        <!-- Contenedor del canvas -->
-        <div class="flex-1 flex overflow-hidden">
-          <Orbits controls={controls} class="flex-1 w-full h-full" />
-        </div>
-      </TabItem>
+  <main class="main-content">
+    <div class="tabs-wrapper">
+      <Tabs style="underline">
+        
+        <TabItem open title="3D Orbit">
+          <div class="tab-content">
+            <Orbits controls={controls}/>
+          </div>
+        </TabItem>
 
-      <TabItem title="Earth Map" class="flex-1 flex flex-col overflow-hidden">
-        <div class="flex-1 flex overflow-hidden">
-          <EarthMap class="flex-1 w-full h-full" />
-        </div>
-      </TabItem>
+        <TabItem title="Earth Map">
+          <div class="tab-content">
+            <EarthMap/>
+          </div>
+        </TabItem>
 
-    </Tabs>
+      </Tabs>
+    </div>
   </main>
 </div>
+
+<style>
+.app-container {
+  display: flex;
+  height: 100vh;
+  background-color: #1e293b; /* slate-950 */
+  color: white;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Flowbite Tabs wrapper must stretch */
+.tabs-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+
+.tab-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+</style>
