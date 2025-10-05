@@ -318,7 +318,7 @@
           durationSec: 1.0,
           maxRadiusAU: planetVisRadiusAU["Earth"] * 12,
           color: 0xffee66,
-          startRadiusAU: planetVisRadiusAU["Earth"] * 0.18,
+          startRadiusAU: planetVisRadiusAU["Earth"] * 10,
           alwaysOnTop: true,
         });
         cleanupMeteor();
