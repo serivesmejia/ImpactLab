@@ -32,6 +32,7 @@
         height: 90vh; /* 75% of the viewport height */
         width: 100%;
         border-radius: 0.5rem; /* Optional: adds rounded corners */
+        overflow: hidden;
     }
 </style>
 

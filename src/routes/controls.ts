@@ -1,3 +1,4 @@
 export type Controls = {
-    daysPerSec: number
+    daysPerSec: number,
+    shooting: boolean
 }
