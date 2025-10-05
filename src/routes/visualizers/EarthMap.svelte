@@ -10,28 +10,38 @@
   let map: Map;
   let impactCircle: any;
   let lethalCircle: any;
-  let mounted = false; // controla si ya se hizo clic en el mapa
+  let mounted = false;
 
+  let isMobile = false;
+
+  // Detecta si el dispositivo es móvil
+  function detectMobile() {
+    // Básico: puede mejorarse según necesidad
+    return /Mobi|Android|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
+  }
+
+  // Calcula radio de impacto
   function calculateImpactRadiusKm(c: Controls) {
     const D = c.size ?? 1;
     const v = c.velocity ?? 20;
-    const radiusKm = 10 * Math.pow(D, 0.78) * Math.pow(v, 0.44);
-    return radiusKm;
+    return 10 * Math.pow(D, 0.78) * Math.pow(v, 0.44);
   }
 
+  // Calcula radio letal
   function calculateLethalRadiusKm(controls: Controls) {
-    const density = 3000; // kg/m³
+    const density = 3000;
     const radiusM = (controls.size * 1000) / 2;
     const volume = (4 / 3) * Math.PI * radiusM ** 3;
     const mass = volume * density;
     const velocityMs = controls.velocity * 1000;
     const energyJ = 0.5 * mass * velocityMs ** 2;
-
     const k = 0.05;
     return (Math.cbrt(energyJ) * k) / 1000;
   }
 
   onMount(async () => {
+    isMobile = detectMobile();
+
     const L = await import("leaflet");
 
     map = L.map(mapContainer, {
@@ -55,7 +65,7 @@
     impactCircle.addTo(map);
 
     lethalCircle = L.circle([0, 0], {
-      radius: 0 * 1000,
+      radius: 0,
       color: "yellow",
       fillColor: "yellow",
       fillOpacity: 0.3,
@@ -74,15 +84,13 @@
       const { lat, lng } = e.latlng;
       $controls.latitude = lat;
       $controls.longitude = lng;
-
-      // Oculta el tooltip después del primer clic
-      mounted = true;
+      mounted = true; // Oculta el tooltip
     });
 
     setTimeout(() => map.invalidateSize(), 0);
   });
 
-  // Actualiza las zonas cuando cambia el control (y después del mount)
+  // Recalcular zonas si mounted y hay datos
   $: if (mounted) {
     const lat = $controls.latitude ?? 0;
     const lng = $controls.longitude ?? 0;
@@ -92,7 +100,6 @@
     impactCircle.setRadius(radiusKm * 1000);
 
     const lethalRadiusKm = calculateLethalRadiusKm($controls);
-
     lethalCircle.setLatLng([lat, lng]);
     lethalCircle.setRadius(lethalRadiusKm * 1000);
   }
@@ -109,9 +116,13 @@
 <!-- Contenedor del mapa -->
 <div bind:this={mapContainer} class="map"></div>
 
-<!-- Tooltip flotante que desaparece después del clic -->
+<!-- Tooltip adaptado a dispositivo -->
 <div class="map-tooltip" class:hide-tooltip={mounted}>
-  Left-click on the map to pinpoint an impact location.
+  {#if isMobile}
+    Tap on the map to pinpoint an impact location.
+  {:else}
+    Left-click on the map to pinpoint an impact location.
+  {/if}
 </div>
 
 <style>
@@ -136,6 +147,7 @@
     z-index: 1000;
     pointer-events: none;
     transition: opacity 0.5s ease-in-out;
+    white-space: nowrap;
   }
 
   .hide-tooltip {
