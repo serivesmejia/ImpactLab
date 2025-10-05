@@ -1,16 +1,17 @@
 <script lang="ts">
   import favicon from "$lib/assets/impactlab.png";
+  import type { Writable } from "svelte/store";
   import type { Controls } from "./controls";
 
-  export let controls: Controls;
+  export let controls: Writable<Controls>;
 
   // Inicializamos shooting si no existe
   if (controls.shooting === undefined) {
-    controls.shooting = false;
+    $controls.shooting = false;
   }
 
   function toggleShooting() {
-    controls.shooting = !controls.shooting;
+    $controls.shooting = !$controls.shooting;
   }
 </script>
 
@@ -33,19 +34,19 @@
         <div>
           <label class="block mb-1">Asteroid Size (km)</label>
           <input type="number" class="w-full p-2 rounded text-black"
-            bind:value={controls.size}
+            bind:value={$controls.size}
           />
         </div>
         <div>
           <label class="block mb-1">Distance From Earth (km)</label>
           <input type="number" class="w-full p-2 rounded text-black"
-            bind:value={controls.distance}
+            bind:value={$controls.distance}
           />
         </div>
         <div>
           <label class="block mb-1">Velocity (km/s)</label>
           <input type="number" class="w-full p-2 rounded text-black"
-            bind:value={controls.velocity}
+            bind:value={$controls.velocity}
           />
         </div>
 
@@ -57,7 +58,7 @@
             step="0.0001"
             min="-90"
             max="90"
-            bind:value={controls.latitude}
+            bind:value={$controls.latitude}
           />
         </div>
         <div>
@@ -68,34 +69,34 @@
             step="0.0001"
             min="-180"
             max="180" 
-            bind:value={controls.longitude}
+            bind:value={$controls.longitude}
           />
         </div>
 
         <!-- Shooting Button -->
         <div class="mt-4">
           <button
-            class="w-full py-3 rounded font-bold transition-colors shooting-btn {controls.shooting
+            class="w-full py-3 rounded font-bold transition-colors shooting-btn {$controls.shooting
               ? 'shooting-active'
               : 'shooting-ready'}"
             on:click={toggleShooting}
           >
-            {controls.shooting ? "Stop the Impact" : "Ready for Impact"}
+            {$controls.shooting ? "Stop the Impact" : "Start the Impact"}
           </button>
         </div>
       </div>
 
       <div class="time">
         <label for="time-scale">
-          Time Scale: {controls.yearsPerSec} years/second
+          Time Scale: {$controls.yearsPerSec} years/second
         </label>
         <input
           id="time-scale"
           type="range"
-          min="0"
-          max="5"
+          min="0.05"
+          max="1.5"
           step="0.05"
-          bind:value={controls.yearsPerSec}
+          bind:value={$controls.yearsPerSec}
           class="w-full"
         />
       </div>

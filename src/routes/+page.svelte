@@ -5,17 +5,17 @@
 
     import type { Controls } from "./controls";
     import { Tabs, TabItem } from "flowbite-svelte";
-    import { writable } from "svelte/store";
+    import { writable, type Writable } from "svelte/store";
 
-    const controls: Controls = {
+    const controls: Writable<Controls> = writable({
         yearsPerSec: 0.05,
         shooting: false,
-        size: 100,       // km
-        distance: 400000, // km
-        velocity: 30,    // km/s
-        latitude: 0,     // degrees
-        longitude: 0     // degrees
-    };
+        size: 5,       // km
+        distance: 10000, // km
+        velocity: 10,    // km/s
+        latitude: 28.5,     // degrees
+        longitude: -106     // degrees
+    });
 
     // Estado para el sidebar
     const sidebarOpen = writable(true);
@@ -50,7 +50,7 @@
 
                 <TabItem title="Earth Map" class="tab-item">
                     <div class="tab-content">
-                        <EarthMap />
+                        <EarthMap {controls} />
                     </div>
                 </TabItem>
             </Tabs>
