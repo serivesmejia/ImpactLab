@@ -263,7 +263,7 @@
             const dt = (now - last) / 1000;
             last = now;
 
-            time.tick(dt * controls.daysPerSec);
+            time.tick(dt * (controls.shooting ? controls.yearsPerSec : 0));
             setTimeDays(time.days);
 
             updateDynamicBodies(dt); // actualizar meteoritos
@@ -273,7 +273,6 @@
             labelRenderer.render(scene, camera);
         }
         requestAnimationFrame(animate);
-        
         let resizeTimeout: number;
 
         function handleResizeDebounced() {
@@ -289,10 +288,11 @@
             }, 50);
         }
 
-        // Suscribirte a la store dentro del script de Svelte
-        sidebarOpen.subscribe((open) => {
+        // use resize observer for container
+        const resizeObserver = new ResizeObserver(() => {
             handleResizeDebounced();
         });
+        resizeObserver.observe(container);
 
         // También para cambios de window
         window.addEventListener("resize", handleResizeDebounced);

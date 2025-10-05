@@ -8,8 +8,13 @@
     import { writable } from "svelte/store";
 
     const controls: Controls = {
-        daysPerSec: 1,
-        shooting: false
+        yearsPerSec: 0.05,
+        shooting: false,
+        size: 100,       // km
+        distance: 400000, // km
+        velocity: 30,    // km/s
+        latitude: 0,     // degrees
+        longitude: 0     // degrees
     };
 
     // Estado para el sidebar

@@ -1,4 +1,10 @@
 export type Controls = {
-    daysPerSec: number,
-    shooting: boolean
+    yearsPerSec: number,
+    shooting: boolean,
+
+    size: number,
+    distance: number,
+    velocity: number,
+    latitude: number,
+    longitude: number,
 }
