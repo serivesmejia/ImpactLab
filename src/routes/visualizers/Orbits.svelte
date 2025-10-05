@@ -45,8 +45,19 @@
   let meteorTrail: THREE.Mesh | null = null;
   let trailPoints: THREE.Vector3[] = [];
   const TRAIL_MAX_POINTS = 600;
-  const TRAIL_RADIUS = au(0.004);
-  const METEOR_RADIUS_AU = 0.02;
+  const TRAIL_RADIUS = au(0.01);
+  const TRAIL_RADIAL_SEGMENTS = 16;
+  const METEOR_RADIUS_AU = 0.04;
+
+  // Impacto y robustez
+  const HIT_MARGIN_FACTOR = 1.6;      // margen generoso para impacto
+  const REBASE_EXPLODE_FACTOR = 1.5;  // si rebasa pero llegó cerca, explota
+  const METEOR_MAX_STEP_DAYS = 0.25;  // subpaso máx (para no saltarse la Tierra)
+  let lastEarthDist: number | null = null; // para detectar periapsis/cercanía
+
+  // Sol: evitar cruces
+  const SUN_RADIUS_AU = 0.08;         // coincide con tu geometría del Sol
+  const SUN_CLEAR_FACTOR = 1.12;      // margen extra
 
   // Explosión simple
   let explosion: SimpleExplosion;
@@ -58,7 +69,7 @@
 
   function buildSolarSystem(scene: THREE.Scene) {
     sun = new THREE.Mesh(
-      new THREE.SphereGeometry(au(0.08), 32, 16),
+      new THREE.SphereGeometry(au(SUN_RADIUS_AU), 32, 16),
       new THREE.MeshBasicMaterial({ color: 0xffd27f }),
     );
     scene.add(sun);
@@ -121,6 +132,19 @@
     return sprite;
   }
 
+  // ---- Sun intersection helper ----
+  /** Returns true if the segment p0->p1 intersects a sphere centered at origin with given radius (in AU). */
+  function segmentIntersectsSun(p0: THREE.Vector3, p1: THREE.Vector3, radiusAU: number): boolean {
+    const R = au(radiusAU * SUN_CLEAR_FACTOR);
+    const d = new THREE.Vector3().subVectors(p1, p0);
+    const L2 = d.lengthSq();
+    if (L2 === 0) return p0.length() <= R;
+    const t = THREE.MathUtils.clamp(-p0.dot(d) / L2, 0, 1);
+    const closest = new THREE.Vector3().copy(p0).addScaledVector(d, t);
+    const dist = closest.length();
+    return dist <= R;
+  }
+
   export function calculateEarthStartForImpact(
     earthData: { a: number; e: number; i: number; O: number; w: number; P: number },
     currentDays: number,
@@ -155,19 +179,39 @@
     return bestDays;
   }
 
+  // ---- Spawn that picks side and avoids Sun crossing ----
   function spawnMeteorTowardEarth(scene: THREE.Scene) {
-    if (activeMeteor) return; // protege: solo 1 meteoro activo
+    if (activeMeteor) return; // solo 1 meteoro activo
 
     const earthData = bodies.find((b) => b.name === "Earth");
     if (!earthData) return;
 
     const speedAUperDay = ($controls.velocity || 0.001) * ($controls.yearsPerSec || 1) * 365.25;
     const spawnDist = $controls.distance || 6;
-    const meteorStart = new THREE.Vector3(0, 0, spawnDist);
 
-    const impactDays = calculateEarthStartForImpact(earthData, time.days, meteorStart, speedAUperDay);
+    // temporal start to compute impact timing
+    const tempStart = new THREE.Vector3(0, 0, spawnDist);
+    const impactDays = calculateEarthStartForImpact(earthData, time.days, tempStart, speedAUperDay);
     const M_impact = (360 / earthData.P) * impactDays;
-    const earthImpactPos = elementsToPosition(earthData.a, earthData.e, earthData.i, earthData.O, earthData.w, M_impact % 360);
+    const earthImpactPos = elementsToPosition(
+      earthData.a, earthData.e, earthData.i, earthData.O, earthData.w, M_impact % 360
+    );
+
+    // Try +Z and -Z; pick one that doesn't cross the Sun
+    const candidateA = new THREE.Vector3(0, 0, +spawnDist);
+    const candidateB = new THREE.Vector3(0, 0, -spawnDist);
+    const crossesA = segmentIntersectsSun(candidateA, earthImpactPos, SUN_RADIUS_AU);
+    const crossesB = segmentIntersectsSun(candidateB, earthImpactPos, SUN_RADIUS_AU);
+
+    let meteorStart: THREE.Vector3 | null = null;
+    if (!crossesA) meteorStart = candidateA;
+    else if (!crossesB) meteorStart = candidateB;
+
+    // Fallback: spawn along Earth's radial direction (cannot cross the sun)
+    if (!meteorStart) {
+      const earthDir = earthImpactPos.clone().normalize();
+      meteorStart = earthDir.multiplyScalar(spawnDist);
+    }
 
     const direction = earthImpactPos.clone().sub(meteorStart).normalize();
     const velocity = direction.multiplyScalar(speedAUperDay);
@@ -194,11 +238,17 @@
     scene.add(meteorLight);
 
     // estela tubular
-    trailPoints = [meteorStart.clone(), meteorStart.clone().add(direction.clone().multiplyScalar(au(0.001)))];
-    const tubeGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(trailPoints), 32, TRAIL_RADIUS, 8, false);
-    const tubeMat = new THREE.MeshBasicMaterial({ color: 0xffb65c, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    const firstDir = direction.clone().multiplyScalar(au(0.001));
+    trailPoints = [meteorStart.clone(), meteorStart.clone().add(firstDir)];
+    const tubeGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(trailPoints), 32, TRAIL_RADIUS, TRAIL_RADIAL_SEGMENTS, false);
+    const tubeMat = new THREE.MeshBasicMaterial({
+      color: 0xffb65c, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false
+    });
     meteorTrail = new THREE.Mesh(tubeGeo, tubeMat);
     scene.add(meteorTrail);
+
+    // reset tracking
+    lastEarthDist = null;
   }
 
   function cleanupMeteor() {
@@ -224,57 +274,103 @@
       meteorTrail = null;
     }
     trailPoints = [];
+    lastEarthDist = null;
   }
 
+  // ===== Update robusto con sub–pasos, margen y detección de rebase =====
   function updateDynamicBodies(dtDays: number) {
-    dynamicBodies.forEach((body) => {
-      body.position.addScaledVector(body.velocity, dtDays);
-      body.mesh.position.copy(body.position);
-    });
+    let remaining = dtDays;
+    while (remaining > 0) {
+      const h = Math.min(remaining, METEOR_MAX_STEP_DAYS);
+      remaining -= h;
 
-    if (activeMeteor) {
+      // integra TODOS los dynamicBodies (balístico: v constante)
+      dynamicBodies.forEach((body) => {
+        body.position.addScaledVector(body.velocity, h);
+        body.mesh.position.copy(body.position);
+      });
+
+      if (!activeMeteor) continue;
+
+      // Sun runtime guard: nunca entrar al Sol
+      const sunRadiusWorld = au(SUN_RADIUS_AU * SUN_CLEAR_FACTOR);
+      if (activeMeteor.position.length() <= sunRadiusWorld) {
+        cleanupMeteor();
+        continue;
+      }
+
+      // FX sigue al meteoro
       if (meteorGlow) meteorGlow.position.copy(activeMeteor.position);
       if (meteorLight) meteorLight.position.copy(activeMeteor.position);
 
-      // actualizar estela
-      trailPoints.push(activeMeteor.position.clone());
-      if (trailPoints.length > TRAIL_MAX_POINTS) trailPoints.splice(0, trailPoints.length - TRAIL_MAX_POINTS);
-      if (meteorTrail) {
-        const curve = new THREE.CatmullRomCurve3(trailPoints);
-        const newGeo = new THREE.TubeGeometry(curve, Math.max(16, trailPoints.length - 1), TRAIL_RADIUS, 8, false);
-        meteorTrail.geometry.dispose();
-        meteorTrail.geometry = newGeo;
+      const earth = planetMeshes["Earth"];
+      if (!earth) continue;
+
+      // ----- distancias / umbrales -----
+      const dist = activeMeteor.position.distanceTo(earth.position);
+      const baseHit = au(planetVisRadiusAU["Earth"] + METEOR_RADIUS_AU * 0.9);
+      const hitDist = baseHit * HIT_MARGIN_FACTOR;
+
+      // 1) impacto directo
+      if (dist <= hitDist) {
+        const impactPoint = activeMeteor.position.clone();
+        explosion.spawn(impactPoint, {
+          durationSec: 1.0,
+          maxRadiusAU: planetVisRadiusAU["Earth"] * 12,
+          color: 0xffee66,
+          startRadiusAU: planetVisRadiusAU["Earth"] * 0.18,
+          alwaysOnTop: true,
+        });
+        cleanupMeteor();
+
+        $controls.shooting = false; // detener
+
+        lastEarthDist = null;
+        continue;
       }
 
-      // colisión con Tierra
-      const earth = planetMeshes["Earth"];
-      if (earth) {
-        const dist = activeMeteor.position.distanceTo(earth.position);
-        const hitDist = au(planetVisRadiusAU["Earth"] + METEOR_RADIUS_AU * 1.2);
-        if (dist <= hitDist) {
-          const impactPoint = activeMeteor.position.clone();
+      // 2) rebasa: si el ángulo indica que la Tierra quedó atrás
+      const forward = activeMeteor.velocity.clone().normalize();
+      const toEarth = earth.position.clone().sub(activeMeteor.position);
+      const rebase = toEarth.dot(forward) < 0;
 
-          // Explosión simple
+      if (rebase) {
+        // si llegó suficientemente cerca, detona aunque ya vaya de salida
+        if (lastEarthDist !== null && lastEarthDist <= hitDist * REBASE_EXPLODE_FACTOR) {
+          const impactPoint = activeMeteor.position.clone();
           explosion.spawn(impactPoint, {
             durationSec: 1.0,
-            maxRadiusAU: planetVisRadiusAU["Earth"] * 0.7,
+            maxRadiusAU: planetVisRadiusAU["Earth"] * 1.8,
             color: 0xffee66,
-            startRadiusAU: 0.0,
+            startRadiusAU: planetVisRadiusAU["Earth"] * 0.18,
+            alwaysOnTop: true,
           });
-
-          cleanupMeteor();
-          // Nota: dejamos que la explosión termine sola
         }
+        cleanupMeteor();
+        lastEarthDist = null;
+        continue;
+      }
 
-        // --- Rebasa la Tierra: si ya pasó, se borra ---
-        if (activeMeteor) {
-          const forward = activeMeteor.velocity.clone().normalize();
-          const toEarth = earth.position.clone().sub(activeMeteor.position);
-          if (toEarth.dot(forward) < -30) {
-            // ya la dejó atrás
-            cleanupMeteor();
-          }
-        }
+      // guardar distancia para periapsis/cercanía
+      lastEarthDist = dist;
+    }
+
+    // ====== TRAIL update (una vez por frame con la posición final) ======
+    if (activeMeteor) {
+      trailPoints.push(activeMeteor.position.clone());
+      if (trailPoints.length > TRAIL_MAX_POINTS)
+        trailPoints.splice(0, trailPoints.length - TRAIL_MAX_POINTS);
+      if (meteorTrail) {
+        const curve = new THREE.CatmullRomCurve3(trailPoints);
+        const newGeo = new THREE.TubeGeometry(
+          curve,
+          Math.max(16, trailPoints.length - 1),
+          TRAIL_RADIUS,
+          TRAIL_RADIAL_SEGMENTS,
+          false
+        );
+        meteorTrail.geometry.dispose();
+        meteorTrail.geometry = newGeo;
       }
     }
   }
@@ -291,7 +387,8 @@
     const camera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.01, 5e6);
     camera.position.set(0, 300, 500);
 
-    const orbitControls = new OrbitControls(camera, container);
+    // usa el DOM del renderer para controles
+    const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
 
     const hemi = new THREE.HemisphereLight(0xffffff, 0x111133, 0.25);
@@ -350,14 +447,11 @@
 
   // Solo 1 meteoro por press; limpieza total al soltar
   $: if ($controls && scene) {
-    // flanco ↑: false -> true
     if ($controls.shooting && !lastShooting) {
       spawnMeteorTowardEarth(scene);
     }
-    // flanco ↓: true -> false
     if (!$controls.shooting && lastShooting) {
       cleanupMeteor(); // borra meteoro + FX
-      // la explosión (si existe) termina sola
     }
     lastShooting = !!$controls.shooting;
   }
